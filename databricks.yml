@@ -1,0 +1,133 @@
+# Databricks Asset Bundle: PAT Rotation
+# https://docs.databricks.com/dev-tools/bundles/index.html
+bundle:
+  name: pat-rotation
+
+# ──────────────────────────────────────────────────────────────────
+# Variables — env ごとに override する
+#
+# 使い方:
+#   1) targets.<env>.variables で値を埋める (推奨)
+#   2) または CLI で:
+#        databricks bundle deploy --var="workspace_host=..." -t <env>
+# ──────────────────────────────────────────────────────────────────
+variables:
+  workspace_host:
+    description: "Databricks workspace host (https://...)"
+  warehouse_http_path:
+    description: "SQL Warehouse HTTP path (e.g. /sql/1.0/warehouses/xxxxxxxxxxxx)"
+  notification_email:
+    description: "Email to notify on Job failure"
+  secret_scope:
+    description: "Databricks Secret Scope holding OAuth & rotated PAT"
+    default: pat-rotation
+  oauth_id_key:
+    description: "Secret key for SP OAuth Client ID"
+    default: oauth-client-id
+  oauth_secret_key:
+    description: "Secret key for SP OAuth Client Secret"
+    default: oauth-client-secret
+  host_key:
+    description: "Secret key holding workspace host (used by SDK env)"
+    default: workspace-host
+  pat_key:
+    description: "Secret key where the rotated PAT is stored"
+    default: current-pat
+  lifetime_days:
+    description: "PAT lifetime in days"
+    default: "90"
+  schedule_cron:
+    description: "Quartz cron expression for production rotation"
+    default: "0 0 17 1 * ?"   # 毎月1日 17:00 UTC
+  schedule_pause_status:
+    description: "PAUSED or UNPAUSED. Start as PAUSED until validated."
+    default: PAUSED
+
+resources:
+  jobs:
+    # ──────────────────────────────────────────────────────────────
+    # Smoke test: AWS / OAuth 不要のロジック検証
+    # 実行ユーザー (= Job 所有者) のコンテキストで一時 PAT を発行 → 削除
+    # ──────────────────────────────────────────────────────────────
+    rotate_quicksight_pat_test:
+      name: "[TEST] PAT rotation smoke test"
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+        no_alert_for_skipped_runs: true
+
+      tasks:
+        - task_key: smoke_test
+          notebook_task:
+            notebook_path: ./notebooks/rotate_quicksight_pat_test.py
+            base_parameters:
+              workspace_host:        ${var.workspace_host}
+              warehouse_http_path:   ${var.warehouse_http_path}
+              test_lifetime_seconds: "600"
+          timeout_seconds: 600
+
+      tags:
+        purpose: pat-rotation-test
+
+    # ──────────────────────────────────────────────────────────────
+    # 本番: SP の OAuth Secret + Databricks Secret Scope で PAT ローテーション
+    # ──────────────────────────────────────────────────────────────
+    rotate_pat:
+      name: "Rotate PAT (SP via Secret Scope)"
+      max_concurrent_runs: 1
+
+      schedule:
+        quartz_cron_expression: ${var.schedule_cron}
+        timezone_id: UTC
+        pause_status: ${var.schedule_pause_status}
+
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+        no_alert_for_skipped_runs: true
+
+      tasks:
+        - task_key: rotate
+          notebook_task:
+            notebook_path: ./notebooks/rotate_quicksight_pat.py
+            base_parameters:
+              secret_scope:        ${var.secret_scope}
+              oauth_id_key:        ${var.oauth_id_key}
+              oauth_secret_key:    ${var.oauth_secret_key}
+              host_key:            ${var.host_key}
+              pat_key:             ${var.pat_key}
+              warehouse_http_path: ${var.warehouse_http_path}
+              lifetime_days:       ${var.lifetime_days}
+          timeout_seconds: 600
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
+      tags:
+        purpose: pat-rotation
+
+# ──────────────────────────────────────────────────────────────────
+# Targets — env ごとに workspace と変数を上書き
+#
+# 自分の環境用には targets/<your-env>.yml.example をコピーして編集する想定。
+# 下記の "example" target は雛形 (実値は入れない) で git に commit してよい。
+# ──────────────────────────────────────────────────────────────────
+targets:
+  # 自分の環境用にこのブロックをコピーして編集してください。
+  # workspace.host は変数解決前に評価されるため直接記載が必要。
+  example:
+    mode: development
+    default: true
+    workspace:
+      host: https://<workspace>.cloud.databricks.com   # ★ 自分の workspace host に置換
+    variables:
+      # ▼ 必須: 自分の環境に合わせて埋める
+      workspace_host:        https://<workspace>.cloud.databricks.com
+      warehouse_http_path:   /sql/1.0/warehouses/<warehouse-id>
+      notification_email:    you@example.com
+      # ▼ 任意: デフォルトのままで OK
+      # secret_scope:        pat-rotation
+      # lifetime_days:       "90"
+      # schedule_cron:       "0 0 17 1 * ?"
+      # schedule_pause_status: PAUSED

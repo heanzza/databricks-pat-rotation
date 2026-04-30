@@ -1,0 +1,25 @@
+# Databricks Asset Bundle artifacts
+.databricks/
+databricks.yml.local
+databricks.local.yml
+*.local.yml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / Env
+.env
+.env.*
+*.key
+*.pem
