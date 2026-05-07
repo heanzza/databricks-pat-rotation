@@ -36,6 +36,13 @@ variables:
   lifetime_days:
     description: "PAT lifetime in days"
     default: "90"
+  pat_scopes:
+    description: |
+      Comma-separated API scopes for the issued PAT (least-privilege).
+      QuickSight only needs SQL Warehouse access → "sql".
+      Empty string = full permissions of the SP (not recommended).
+      DO NOT include "authentication" — it lets the token mint other tokens.
+    default: "sql"
   schedule_cron:
     description: "Quartz cron expression for production rotation"
     default: "0 0 17 1 * ?"   # 毎月1日 17:00 UTC
@@ -66,6 +73,7 @@ resources:
               workspace_host:        ${var.workspace_host}
               warehouse_http_path:   ${var.warehouse_http_path}
               test_lifetime_seconds: "600"
+              pat_scopes:            ${var.pat_scopes}
           timeout_seconds: 600
 
       tags:
@@ -100,6 +108,7 @@ resources:
               pat_key:             ${var.pat_key}
               warehouse_http_path: ${var.warehouse_http_path}
               lifetime_days:       ${var.lifetime_days}
+              pat_scopes:          ${var.pat_scopes}
           timeout_seconds: 600
           max_retries: 1
           min_retry_interval_millis: 60000

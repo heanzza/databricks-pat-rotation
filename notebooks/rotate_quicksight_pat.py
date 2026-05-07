@@ -36,6 +36,7 @@ dbutils.widgets.text("host_key",            "workspace-host")
 dbutils.widgets.text("pat_key",             "current-pat")
 dbutils.widgets.text("warehouse_http_path", "/sql/1.0/warehouses/<warehouse-id>")
 dbutils.widgets.text("lifetime_days",       "90")
+dbutils.widgets.text("pat_scopes",          "sql")
 
 SCOPE          = dbutils.widgets.get("secret_scope")
 OAUTH_ID_KEY   = dbutils.widgets.get("oauth_id_key")
@@ -44,10 +45,12 @@ HOST_KEY       = dbutils.widgets.get("host_key")
 PAT_KEY        = dbutils.widgets.get("pat_key")
 HTTP_PATH      = dbutils.widgets.get("warehouse_http_path")
 LIFETIME_DAYS  = int(dbutils.widgets.get("lifetime_days"))
+PAT_SCOPES     = [s.strip() for s in dbutils.widgets.get("pat_scopes").split(",") if s.strip()]
 
 print(f"scope:         {SCOPE}")
 print(f"http_path:     {HTTP_PATH}")
 print(f"lifetime_days: {LIFETIME_DAYS}")
+print(f"pat_scopes:    {PAT_SCOPES or '(none → full SP permissions)'}")
 
 # COMMAND ----------
 
@@ -75,13 +78,17 @@ print(f"Authenticated as SP: {me.display_name} (id={me.id})")
 
 # COMMAND ----------
 
-new = w.tokens.create(
-    lifetime_seconds=LIFETIME_DAYS * 24 * 3600,
-    comment=f"Rotated {datetime.now(timezone.utc).isoformat()}",
-)
-new_id = new.token_info.token_id
-new_value = new.token_value
-print(f"Issued new PAT  token_id={new_id}  expires_in={LIFETIME_DAYS}d")
+# Use raw REST so `scopes` is sent regardless of databricks-sdk version.
+body = {
+    "lifetime_seconds": LIFETIME_DAYS * 24 * 3600,
+    "comment": f"Rotated {datetime.now(timezone.utc).isoformat()}",
+}
+if PAT_SCOPES:
+    body["scopes"] = PAT_SCOPES
+resp = w.api_client.do("POST", "/api/2.0/token/create", body=body)
+new_id = resp["token_info"]["token_id"]
+new_value = resp["token_value"]
+print(f"Issued new PAT  token_id={new_id}  expires_in={LIFETIME_DAYS}d  scopes={PAT_SCOPES or 'ALL'}")
 
 # COMMAND ----------
 

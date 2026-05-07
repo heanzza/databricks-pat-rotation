@@ -31,14 +31,17 @@ from databricks import sql as dbsql
 dbutils.widgets.text("warehouse_http_path", "/sql/1.0/warehouses/<warehouse-id>")
 dbutils.widgets.text("workspace_host",      "https://<workspace>.cloud.databricks.com")
 dbutils.widgets.text("test_lifetime_seconds", "600")  # 10分: 削除失敗時の保険
+dbutils.widgets.text("pat_scopes",          "sql")
 
 HTTP_PATH = dbutils.widgets.get("warehouse_http_path")
 HOST      = dbutils.widgets.get("workspace_host")
 LIFETIME  = int(dbutils.widgets.get("test_lifetime_seconds"))
+PAT_SCOPES = [s.strip() for s in dbutils.widgets.get("pat_scopes").split(",") if s.strip()]
 
 print(f"workspace_host: {HOST}")
 print(f"http_path:      {HTTP_PATH}")
 print(f"test lifetime:  {LIFETIME}s")
+print(f"pat_scopes:     {PAT_SCOPES or '(none → caller full perms)'}")
 
 # COMMAND ----------
 
@@ -60,13 +63,17 @@ print(f"Email: {me.emails[0].value if me.emails else 'N/A'}")
 
 # COMMAND ----------
 
-new = w.tokens.create(
-    lifetime_seconds=LIFETIME,
-    comment=f"TEST PAT rotation smoke test {datetime.now(timezone.utc).isoformat()}",
-)
-new_id = new.token_info.token_id
-new_value = new.token_value
-print(f"Issued test PAT  token_id={new_id}  expires_in={LIFETIME}s")
+# Use raw REST so `scopes` is sent regardless of databricks-sdk version.
+body = {
+    "lifetime_seconds": LIFETIME,
+    "comment": f"TEST PAT rotation smoke test {datetime.now(timezone.utc).isoformat()}",
+}
+if PAT_SCOPES:
+    body["scopes"] = PAT_SCOPES
+resp = w.api_client.do("POST", "/api/2.0/token/create", body=body)
+new_id = resp["token_info"]["token_id"]
+new_value = resp["token_value"]
+print(f"Issued test PAT  token_id={new_id}  expires_in={LIFETIME}s  scopes={PAT_SCOPES or 'ALL'}")
 
 # COMMAND ----------
 

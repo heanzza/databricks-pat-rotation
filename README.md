@@ -178,6 +178,7 @@ pat = dbutils.secrets.get(scope="pat-rotation", key="current-pat")
 | `host_key` | `workspace-host` | Scope 内の host キー |
 | `pat_key` | `current-pat` | 発行 PAT を保存するキー |
 | `lifetime_days` | `90` | PAT 有効期限 (日) |
+| `pat_scopes` | `sql` | 発行する PAT の API scope (カンマ区切り)。最小権限。空文字 = SP フル権限。`authentication` は付けない |
 | `schedule_cron` | `0 0 17 1 * ?` | Quartz cron — 毎月1日 17:00 UTC |
 | `schedule_pause_status` | `PAUSED` | 初期は PAUSED、確認後 UNPAUSED |
 
